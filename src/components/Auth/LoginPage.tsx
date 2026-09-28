@@ -301,6 +301,52 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             </button>
           </form>
         )}
+
+        {/* Quick One-Tap Staff & Admin Access for Fast Mobile Login */}
+        <div className="p-4 bg-neutral-50 border-t border-neutral-200/80">
+          <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider text-center mb-2.5">
+            One-Tap Quick Entry (Any Device)
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const adminUser = users.find((u) => u.role === 'admin') || {
+                  id: 'user-admin',
+                  username: 'admin',
+                  displayName: 'Shop Admin',
+                  role: 'admin',
+                  password: 'admin',
+                  active: true,
+                  createdAt: new Date().toISOString(),
+                };
+                onLoginSuccess(adminUser);
+              }}
+              className="py-2.5 px-3 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition-all active:scale-95 cursor-pointer"
+            >
+              <span>🔑 Enter as Admin</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                const cashierUser = users.find((u) => u.role === 'cashier') || {
+                  id: 'user-cashier',
+                  username: 'cashier',
+                  displayName: 'Counter Attendant',
+                  role: 'cashier',
+                  password: '1234',
+                  active: true,
+                  createdAt: new Date().toISOString(),
+                };
+                onLoginSuccess(cashierUser);
+              }}
+              className="py-2.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-emerald-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition-all active:scale-95 cursor-pointer"
+            >
+              <span>🛒 Enter as Cashier</span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

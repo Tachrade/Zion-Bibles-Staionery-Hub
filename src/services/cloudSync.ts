@@ -247,7 +247,11 @@ export async function uploadLocalDataToCloud(
     });
 
     const setRef = doc(db, 'settings', 'shopConfig');
-    batch.set(setRef, settings);
+    batch.set(setRef, {
+      ...settings,
+      isClearedToZero: products.length === 0,
+      cloudInitialized: true,
+    }, { merge: true });
 
     await batch.commit();
     return true;
@@ -258,18 +262,33 @@ export async function uploadLocalDataToCloud(
 }
 
 // Clear all cloud data (start fresh)
-export async function clearAllCloudData() {
+export async function clearAllCloudData(currentSettings?: ShopSettings) {
   try {
     const deleteCollection = async (collName: string) => {
       const snap = await getDocs(collection(db, collName));
-      const batch = writeBatch(db);
-      snap.forEach((d) => batch.delete(d.ref));
-      await batch.commit();
+      if (!snap.empty) {
+        const batch = writeBatch(db);
+        snap.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+      }
     };
 
     await deleteCollection('products');
     await deleteCollection('movements');
     await deleteCollection('sales');
+
+    // Persist intentional clean-slate state to Firestore
+    const setRef = doc(db, 'settings', 'shopConfig');
+    await setDoc(
+      setRef,
+      {
+        ...(currentSettings || {}),
+        isClearedToZero: true,
+        cloudInitialized: true,
+        lastClearedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
     return true;
   } catch (e) {
     console.error('Failed to clear cloud data:', e);

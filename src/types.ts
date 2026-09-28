@@ -86,6 +86,8 @@ export interface ShopSettings {
   enableSoundEffects: boolean;
   receiptPaperWidth?: '58mm' | '80mm';
   logoUrl?: string;
+  isClearedToZero?: boolean;
+  cloudInitialized?: boolean;
 }
 
 export type UserRole = 'admin' | 'cashier';
