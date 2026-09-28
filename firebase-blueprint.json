@@ -1,0 +1,24 @@
+{
+  "entities": {
+    "Product": {
+      "path": "/products/{productId}",
+      "description": "Catalog item with stock quantity, pricing, and category"
+    },
+    "StockMovement": {
+      "path": "/movements/{movementId}",
+      "description": "Audit log for stock intake, sale deduction, and reconciliation"
+    },
+    "Sale": {
+      "path": "/sales/{saleId}",
+      "description": "Completed transaction with receipt number and line items"
+    },
+    "Setting": {
+      "path": "/settings/shopConfig",
+      "description": "Store branding, thermal printer paper size, and receipt settings"
+    },
+    "User": {
+      "path": "/users/{userId}",
+      "description": "Admin-created staff accounts with assigned credentials and roles"
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Zion Bible & Stationery Hub - Inventory & Stock Management",
+  "description": "Comprehensive shop inventory management, stock replenishment tracking, post-sale stock verification, POS and sales history for Zion Bible & Stationery Hub.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
