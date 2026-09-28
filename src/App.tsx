@@ -407,11 +407,21 @@ export default function App() {
 
     const newMovements: StockMovement[] = [];
     const updatedProducts = products.map((prod) => {
-      const soldItem = saleData.items.find((i) => i.productId === prod.id);
-      if (!soldItem) return prod;
+      const soldItems = saleData.items.filter((i) => i.productId === prod.id);
+      if (soldItems.length === 0) return prod;
+
+      const totalPiecesDeducted = soldItems.reduce((sum, item) => {
+        if (typeof item.totalPiecesDeducted === 'number') {
+          return sum + item.totalPiecesDeducted;
+        }
+        if (item.unitType === 'pack') {
+          return sum + item.quantity * (item.piecesPerPack || prod.piecesPerPack || 1);
+        }
+        return sum + item.quantity;
+      }, 0);
 
       const previousStock = prod.stock;
-      const newStock = Math.max(0, previousStock - soldItem.quantity);
+      const newStock = Math.max(0, previousStock - totalPiecesDeducted);
 
       const movement: StockMovement = {
         id: `mov-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -419,14 +429,16 @@ export default function App() {
         productName: prod.name,
         productSku: prod.sku,
         type: 'sale',
-        quantityChange: -soldItem.quantity,
+        quantityChange: -totalPiecesDeducted,
         stockBefore: previousStock,
         stockAfter: newStock,
         date: newSale.date,
         referenceNo: `RCP-${receiptNo}`,
         supplierOrParty: saleData.customerName || 'Walk-in Customer',
         unitCostAtMovement: prod.cost,
-        notes: `POS Sale #${receiptNo} - ${soldItem.quantity} unit(s) sold by ${currentUser.displayName}`,
+        notes: `POS Sale #${receiptNo} - ${totalPiecesDeducted} pcs deducted (${soldItems
+          .map((i) => `${i.quantity} ${i.unitType || 'unit'}(s)`)
+          .join(', ')}) by ${currentUser.displayName}`,
       };
 
       newMovements.push(movement);
@@ -468,11 +480,21 @@ export default function App() {
 
     const restoreMovements: StockMovement[] = [];
     const updatedProducts = products.map((prod) => {
-      const itemToRestore = saleToVoid.items.find((i) => i.productId === prod.id);
-      if (!itemToRestore) return prod;
+      const itemsToRestore = saleToVoid.items.filter((i) => i.productId === prod.id);
+      if (itemsToRestore.length === 0) return prod;
+
+      const totalPiecesToRestore = itemsToRestore.reduce((sum, item) => {
+        if (typeof item.totalPiecesDeducted === 'number') {
+          return sum + item.totalPiecesDeducted;
+        }
+        if (item.unitType === 'pack') {
+          return sum + item.quantity * (item.piecesPerPack || prod.piecesPerPack || 1);
+        }
+        return sum + item.quantity;
+      }, 0);
 
       const previousStock = prod.stock;
-      const newStock = previousStock + itemToRestore.quantity;
+      const newStock = previousStock + totalPiecesToRestore;
 
       const movement: StockMovement = {
         id: `mov-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -480,13 +502,13 @@ export default function App() {
         productName: prod.name,
         productSku: prod.sku,
         type: 'return',
-        quantityChange: itemToRestore.quantity,
+        quantityChange: totalPiecesToRestore,
         stockBefore: previousStock,
         stockAfter: newStock,
         date: new Date().toISOString(),
         referenceNo: `VOID-#${saleToVoid.receiptNo}`,
         supplierOrParty: 'Voided Transaction',
-        notes: `Sale #${saleToVoid.receiptNo} voided. ${itemToRestore.quantity} unit(s) restored to inventory.`,
+        notes: `Sale #${saleToVoid.receiptNo} voided. ${totalPiecesToRestore} pcs restored to inventory.`,
       };
 
       restoreMovements.push(movement);

@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
 import { X, Boxes, Truck, Check, AlertCircle, ArrowRight } from 'lucide-react';
 import { Product, StockMovement } from '../../types';
-import { formatCurrency } from '../../utils/formatters';
+import {
+  formatCurrency,
+  formatStockUnits,
+  breakdownStock,
+  calculateTotalPieces
+} from '../../utils/formatters';
 
 interface NewStockModalProps {
   isOpen: boolean;
@@ -32,6 +37,8 @@ export const NewStockModal: React.FC<NewStockModalProps> = ({
     initialProductId || (products.length > 0 ? products[0].id : '')
   );
   const [quantityAdded, setQuantityAdded] = useState<number | ''>(10);
+  const [intakePacks, setIntakePacks] = useState<number | ''>(2);
+  const [intakePieces, setIntakePieces] = useState<number | ''>(0);
   const [unitCost, setUnitCost] = useState<number | ''>('');
   const [supplier, setSupplier] = useState<string>('');
   const [referenceNo, setReferenceNo] = useState<string>('');
@@ -41,13 +48,29 @@ export const NewStockModal: React.FC<NewStockModalProps> = ({
   if (!isOpen) return null;
 
   const currentProduct = products.find((p) => p.id === selectedProductId) || products[0];
+  const ppp = currentProduct?.piecesPerPack || 1;
+  const hasPacks = !!(currentProduct?.hasPacks && ppp > 1);
 
   const handleProductChange = (prodId: string) => {
     setSelectedProductId(prodId);
     const prod = products.find((p) => p.id === prodId);
-    if (prod && (unitCost === '' || unitCost === 0)) {
-      setUnitCost(prod.cost);
+    if (prod) {
+      if (unitCost === '' || unitCost === 0) {
+        setUnitCost(prod.cost);
+      }
+      if (prod.hasPacks && prod.piecesPerPack) {
+        setIntakePacks(2);
+        setIntakePieces(0);
+        setQuantityAdded(2 * prod.piecesPerPack);
+      }
     }
+  };
+
+  const handlePacksOrPiecesChange = (pksVal: number | '', pcsVal: number | '') => {
+    const pks = typeof pksVal === 'number' ? pksVal : 0;
+    const pcs = typeof pcsVal === 'number' ? pcsVal : 0;
+    const total = calculateTotalPieces(pks, pcs, ppp);
+    setQuantityAdded(total);
   };
 
   const currentStock = currentProduct ? currentProduct.stock : 0;
@@ -64,6 +87,10 @@ export const NewStockModal: React.FC<NewStockModalProps> = ({
       return;
     }
 
+    const noteText = hasPacks
+      ? `${notes.trim() ? notes.trim() + ' | ' : ''}Restocked: ${intakePacks || 0} pks & ${intakePieces || 0} pcs (${numQty} total pcs)`.trim()
+      : notes.trim();
+
     onAddStock([
       {
         productId: currentProduct.id,
@@ -71,7 +98,7 @@ export const NewStockModal: React.FC<NewStockModalProps> = ({
         unitCost: effectiveCost,
         supplier: supplier.trim() || 'General Supplier Delivery',
         referenceNo: referenceNo.trim() || `INTK-${Date.now().toString().slice(-6)}`,
-        notes: notes.trim(),
+        notes: noteText,
         updateProductCost,
       },
     ]);
@@ -117,7 +144,10 @@ export const NewStockModal: React.FC<NewStockModalProps> = ({
             >
               {products.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.icon} {p.name} [{p.sku}] — Current Stock: {p.stock}
+                  {p.icon} {p.name} [{p.sku}] — Current Stock:{' '}
+                  {p.hasPacks
+                    ? formatStockUnits(p.stock, p.piecesPerPack, { showTotalPieces: true })
+                    : `${p.stock} pcs`}
                 </option>
               ))}
             </select>
@@ -129,48 +159,138 @@ export const NewStockModal: React.FC<NewStockModalProps> = ({
               <div className="space-y-0.5">
                 <span className="text-neutral-500 font-medium">Current Stock</span>
                 <p className="font-mono text-base font-bold text-neutral-800">
-                  {currentStock} units
+                  {hasPacks
+                    ? formatStockUnits(currentStock, ppp, { showTotalPieces: true, short: true })
+                    : `${currentStock} pcs`}
                 </p>
               </div>
               <div className="flex items-center gap-2 text-emerald-700 font-medium">
                 <ArrowRight className="w-4 h-4 text-neutral-400" />
                 <span className="bg-emerald-100 px-2 py-0.5 rounded font-mono font-semibold">
-                  +{numQty}
+                  +{numQty} pcs
                 </span>
                 <ArrowRight className="w-4 h-4 text-neutral-400" />
               </div>
               <div className="space-y-0.5 text-right">
-                <span className="text-neutral-500 font-medium">New Stock After Intake</span>
+                <span className="text-neutral-500 font-medium">Projected New Stock</span>
                 <p className="font-mono text-base font-bold text-emerald-700">
-                  {projectedStock} units
+                  {hasPacks
+                    ? formatStockUnits(projectedStock, ppp, { showTotalPieces: true, short: true })
+                    : `${projectedStock} pcs`}
                 </p>
               </div>
             </div>
           )}
 
-          {/* Quantity & Unit Cost */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-neutral-700 mb-1.5">
-                Quantity Added <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                min="1"
-                step="1"
-                required
-                value={quantityAdded}
-                onChange={(e) =>
-                  setQuantityAdded(e.target.value === '' ? '' : parseInt(e.target.value, 10))
-                }
-                placeholder="e.g. 20"
-                className="w-full px-3.5 py-2 rounded-lg border border-neutral-300 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-600"
-              />
-            </div>
+          {/* Quantity Section with Pack & Pieces breakdown if applicable */}
+          {hasPacks ? (
+            <div className="p-3 bg-emerald-50/70 border border-emerald-300 rounded-xl space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-950">
+                  Pack Intake ({ppp} pieces per pack)
+                </span>
+                <span className="text-[10px] text-emerald-800">
+                  Enter packs & loose pieces received
+                </span>
+              </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-neutral-700 mb-1">
+                    Whole Packs Received
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={intakePacks}
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? '' : parseInt(e.target.value, 10);
+                        setIntakePacks(val);
+                        handlePacksOrPiecesChange(val, intakePieces);
+                      }}
+                      className="w-full px-3 py-1.5 rounded-lg border border-emerald-300 bg-white text-xs font-mono font-bold"
+                    />
+                    <span className="text-xs text-neutral-600 font-medium">pks</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-neutral-700 mb-1">
+                    Loose Pieces Received
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={intakePieces}
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? '' : parseInt(e.target.value, 10);
+                        setIntakePieces(val);
+                        handlePacksOrPiecesChange(intakePacks, val);
+                      }}
+                      className="w-full px-3 py-1.5 rounded-lg border border-emerald-300 bg-white text-xs font-mono font-bold"
+                    />
+                    <span className="text-xs text-neutral-600 font-medium">pcs</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-xs font-mono font-semibold text-emerald-900 bg-white p-2 rounded-lg border border-emerald-200">
+                <span>Total Pieces Added:</span>
+                <span>
+                  {numQty} pcs ({intakePacks || 0} pks {intakePieces || 0} pcs)
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 mb-1.5">
+                  Quantity Added (Pieces) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  required
+                  value={quantityAdded}
+                  onChange={(e) =>
+                    setQuantityAdded(e.target.value === '' ? '' : parseInt(e.target.value, 10))
+                  }
+                  placeholder="e.g. 20"
+                  className="w-full px-3.5 py-2 rounded-lg border border-neutral-300 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 mb-1.5">
+                  Cost per Piece (₦)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={unitCost !== '' ? unitCost : currentProduct?.cost || ''}
+                  onChange={(e) =>
+                    setUnitCost(e.target.value === '' ? '' : parseFloat(e.target.value))
+                  }
+                  placeholder={`Current: ${currentProduct?.cost || 0}`}
+                  className="w-full px-3.5 py-2 rounded-lg border border-neutral-300 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                />
+                <span className="text-[11px] text-neutral-500 mt-1 block">
+                  Batch investment: <strong className="font-mono">{formatCurrency(totalBatchCost)}</strong>
+                </span>
+              </div>
+            </div>
+          )}
+
+          {hasPacks && (
             <div>
               <label className="block text-xs font-semibold text-neutral-700 mb-1.5">
-                Unit Cost Paid (₦)
+                Cost per Piece (₦)
               </label>
               <input
                 type="number"
@@ -187,7 +307,7 @@ export const NewStockModal: React.FC<NewStockModalProps> = ({
                 Total batch investment: <strong className="font-mono">{formatCurrency(totalBatchCost)}</strong>
               </span>
             </div>
-          </div>
+          )}
 
           {/* Supplier / Vendor & Invoice / Delivery Note # */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

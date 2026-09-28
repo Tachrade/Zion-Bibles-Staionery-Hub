@@ -12,6 +12,28 @@ import { Product, StockMovement, Sale, ShopSettings, ShopUser } from '../types';
 
 export type CloudSyncStatus = 'connected' | 'connecting' | 'offline' | 'error';
 
+/**
+ * Recursively removes keys with undefined values, as Firestore strictly rejects undefined.
+ */
+export function sanitizeForFirestore<T>(data: T): T {
+  if (data === null || data === undefined) {
+    return null as any;
+  }
+  if (Array.isArray(data)) {
+    return data.map((item) => sanitizeForFirestore(item)) as any;
+  }
+  if (typeof data === 'object' && !(data instanceof Date)) {
+    const clean: Record<string, any> = {};
+    for (const [key, value] of Object.entries(data as Record<string, any>)) {
+      if (value !== undefined) {
+        clean[key] = sanitizeForFirestore(value);
+      }
+    }
+    return clean as any;
+  }
+  return data;
+}
+
 export function subscribeToCloudUsers(
   onUpdate: (users: ShopUser[]) => void,
   onError?: (err: Error) => void
@@ -42,7 +64,7 @@ export function subscribeToCloudUsers(
 export async function saveUserToCloud(user: ShopUser) {
   try {
     const docRef = doc(db, 'users', user.id);
-    await setDoc(docRef, user, { merge: true });
+    await setDoc(docRef, sanitizeForFirestore(user), { merge: true });
   } catch (e) {
     console.warn('Failed to save user to cloud:', e);
   }
@@ -170,7 +192,7 @@ export function subscribeToCloudSettings(
 export async function saveProductToCloud(product: Product) {
   try {
     const docRef = doc(db, 'products', product.id);
-    await setDoc(docRef, product, { merge: true });
+    await setDoc(docRef, sanitizeForFirestore(product), { merge: true });
   } catch (e) {
     console.warn('Failed to save product to cloud:', e);
   }
@@ -188,7 +210,7 @@ export async function deleteProductFromCloud(productId: string) {
 export async function saveMovementToCloud(movement: StockMovement) {
   try {
     const docRef = doc(db, 'movements', movement.id);
-    await setDoc(docRef, movement);
+    await setDoc(docRef, sanitizeForFirestore(movement));
   } catch (e) {
     console.warn('Failed to save movement to cloud:', e);
   }
@@ -197,7 +219,7 @@ export async function saveMovementToCloud(movement: StockMovement) {
 export async function saveSaleToCloud(sale: Sale) {
   try {
     const docRef = doc(db, 'sales', sale.id);
-    await setDoc(docRef, sale);
+    await setDoc(docRef, sanitizeForFirestore(sale));
   } catch (e) {
     console.warn('Failed to save sale to cloud:', e);
   }
@@ -215,7 +237,7 @@ export async function deleteSaleFromCloud(saleId: string) {
 export async function saveSettingsToCloud(settings: ShopSettings) {
   try {
     const docRef = doc(db, 'settings', 'shopConfig');
-    await setDoc(docRef, settings, { merge: true });
+    await setDoc(docRef, sanitizeForFirestore(settings), { merge: true });
   } catch (e) {
     console.warn('Failed to save settings to cloud:', e);
   }
@@ -233,25 +255,25 @@ export async function uploadLocalDataToCloud(
 
     products.forEach((p) => {
       const ref = doc(db, 'products', p.id);
-      batch.set(ref, p);
+      batch.set(ref, sanitizeForFirestore(p));
     });
 
     movements.forEach((m) => {
       const ref = doc(db, 'movements', m.id);
-      batch.set(ref, m);
+      batch.set(ref, sanitizeForFirestore(m));
     });
 
     sales.forEach((s) => {
       const ref = doc(db, 'sales', s.id);
-      batch.set(ref, s);
+      batch.set(ref, sanitizeForFirestore(s));
     });
 
     const setRef = doc(db, 'settings', 'shopConfig');
-    batch.set(setRef, {
+    batch.set(setRef, sanitizeForFirestore({
       ...settings,
       isClearedToZero: products.length === 0,
       cloudInitialized: true,
-    }, { merge: true });
+    }), { merge: true });
 
     await batch.commit();
     return true;
@@ -281,12 +303,12 @@ export async function clearAllCloudData(currentSettings?: ShopSettings) {
     const setRef = doc(db, 'settings', 'shopConfig');
     await setDoc(
       setRef,
-      {
+      sanitizeForFirestore({
         ...(currentSettings || {}),
         isClearedToZero: true,
         cloudInitialized: true,
         lastClearedAt: new Date().toISOString(),
-      },
+      }),
       { merge: true }
     );
     return true;

@@ -11,16 +11,21 @@ export interface Product {
   name: string;
   category: ProductCategory;
   sku: string;
-  barcode?: string;
-  price: number; // Selling price in NGN
-  cost: number;  // Cost price in NGN
-  stock: number; // Current on-hand quantity
-  minStock: number; // Reorder alert threshold (default e.g. 5)
+  price: number; // Selling price in NGN (individual piece price)
+  cost: number;  // Cost price in NGN (individual piece cost)
+  stock: number; // Current on-hand quantity in BASE PIECES
+  minStock: number; // Reorder alert threshold (in base pieces, default e.g. 5)
   shelfLocation?: string; // e.g. "Shelf A-3", "Display Table 1"
   icon: string;
   description?: string;
   createdAt: string;
   updatedAt: string;
+
+  // Packs & Pieces Wholesale/Retail Configuration
+  hasPacks?: boolean;       // Whether this product sells in packs as well as pieces
+  piecesPerPack?: number;   // Number of pieces per pack (e.g. 5 for Higher Education)
+  packPrice?: number;       // Selling price for 1 full pack in NGN (e.g. 3000)
+  packCost?: number;        // Cost price for 1 full pack in NGN (e.g. 2400)
 }
 
 export type StockMovementType = 
@@ -47,6 +52,8 @@ export interface StockMovement {
   notes?: string;
 }
 
+export type SaleUnitType = 'piece' | 'pack';
+
 export interface SaleItem {
   productId: string;
   name: string;
@@ -55,6 +62,9 @@ export interface SaleItem {
   quantity: number;
   price: number;
   cost: number;
+  unitType?: SaleUnitType;
+  piecesPerPack?: number;
+  totalPiecesDeducted?: number; // total base pieces deducted from inventory (quantity * piecesPerPack if pack, else quantity)
 }
 
 export type PaymentMethod = 'Cash' | 'Transfer' | 'POS Card' | 'Credit' | 'Other';

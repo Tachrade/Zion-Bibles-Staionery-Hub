@@ -170,11 +170,32 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({
                   </td>
 
                   <td className="py-3 px-3">
-                    <div className="max-w-xs truncate text-neutral-700" title={s.items.map((i) => `${i.name} (x${i.quantity})`).join(', ')}>
-                      {s.items.map((i) => `${i.name} (${i.quantity})`).join(', ')}
+                    <div
+                      className="max-w-xs truncate text-neutral-700"
+                      title={s.items
+                        .map(
+                          (i) =>
+                            `${i.name} (x${i.quantity} ${
+                              i.unitType === 'pack' ? 'pk' : 'pcs'
+                            })`
+                        )
+                        .join(', ')}
+                    >
+                      {s.items
+                        .map(
+                          (i) =>
+                            `${i.name} (${i.quantity} ${
+                              i.unitType === 'pack' ? 'pk' : 'pcs'
+                            })`
+                        )
+                        .join(', ')}
                     </div>
                     <span className="text-[10px] text-neutral-400">
-                      {s.items.reduce((acc, i) => acc + i.quantity, 0)} total units
+                      {s.items.reduce(
+                        (acc, i) => acc + (i.totalPiecesDeducted || i.quantity),
+                        0
+                      )}{' '}
+                      total pcs sold
                     </span>
                   </td>
 

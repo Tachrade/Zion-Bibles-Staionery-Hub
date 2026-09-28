@@ -20,8 +20,32 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    <script type="module" crossorigin src="./assets/index-DXNwGJ5Q.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-C0u3Wznm.css">
+    <script>
+      // Defensive guard against browser extensions (e.g., MetaMask, Rabby, Coinbase Wallet)
+      // throwing "Cannot redefine property: ethereum" when multiple web3 extensions collide in iframes
+      try {
+        if (!('ethereum' in window)) {
+          let _eth = undefined;
+          Object.defineProperty(window, 'ethereum', {
+            get() { return _eth; },
+            set(v) { _eth = v; },
+            configurable: true,
+            enumerable: true
+          });
+        }
+      } catch (e) {
+        console.warn('Ethereum shim warning ignored:', e);
+      }
+      // Suppress benign third-party wallet extension collision errors from halting the app
+      window.addEventListener('error', function(event) {
+        if (event && event.message && event.message.includes('ethereum')) {
+          event.stopImmediatePropagation();
+          event.preventDefault();
+        }
+      }, true);
+    </script>
+    <script type="module" crossorigin src="./assets/index-B2Vbq3so.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-DVlmWFDH.css">
   </head>
   <body class="bg-neutral-50 text-neutral-900 font-sans antialiased selection:bg-emerald-100 selection:text-emerald-900">
     <div id="root"></div>

@@ -17,8 +17,8 @@ import {
   History
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { Product, PaymentMethod, SaleItem, ShopSettings } from '../../types';
-import { formatCurrency } from '../../utils/formatters';
+import { Product, PaymentMethod, SaleItem, ShopSettings, SaleUnitType } from '../../types';
+import { formatCurrency, formatStockUnits } from '../../utils/formatters';
 
 interface POSViewProps {
   products: Product[];
@@ -36,8 +36,14 @@ interface POSViewProps {
 }
 
 interface CartItem {
+  id: string; // `${product.id}-${unitType}`
   product: Product;
   quantity: number;
+  unitType: SaleUnitType;
+  unitPrice: number;
+  unitCost: number;
+  piecesPerPack: number;
+  totalPieces: number; // total base pieces deducted
 }
 
 export const POSView: React.FC<POSViewProps> = ({
@@ -66,40 +72,93 @@ export const POSView: React.FC<POSViewProps> = ({
   const filteredProducts = products.filter((p) => {
     const matchesSearch =
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (p.barcode && p.barcode.includes(searchQuery));
+      p.sku.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCat = selectedCategory === 'All' || p.category === selectedCategory;
     return matchesSearch && matchesCat;
   });
 
-  const addToCart = (product: Product) => {
+  // Calculate total pieces of a specific product already in cart
+  const getProductPiecesInCart = (productId: string, excludeItemId?: string) => {
+    return cart
+      .filter((i) => i.product.id === productId && i.id !== excludeItemId)
+      .reduce((sum, i) => sum + i.totalPieces, 0);
+  };
+
+  const addToCart = (product: Product, unitType: SaleUnitType = 'piece') => {
     if (product.stock <= 0) return;
 
+    const ppp = product.piecesPerPack || 1;
+    const piecesNeeded = unitType === 'pack' ? ppp : 1;
+    const currentInCart = getProductPiecesInCart(product.id);
+    const availablePieces = product.stock - currentInCart;
+
+    if (availablePieces < piecesNeeded) {
+      alert(
+        `Insufficient stock for "${product.name}". Remaining available: ${availablePieces} piece(s). Cannot add ${unitType} (${piecesNeeded} pcs).`
+      );
+      return;
+    }
+
+    const price = unitType === 'pack' && product.packPrice ? product.packPrice : product.price;
+    const cost = unitType === 'pack' && product.packCost ? product.packCost : product.cost * (unitType === 'pack' ? ppp : 1);
+    const cartItemId = `${product.id}-${unitType}`;
+
     setCart((prev) => {
-      const existing = prev.find((item) => item.product.id === product.id);
+      const existing = prev.find((item) => item.id === cartItemId);
       if (existing) {
-        if (existing.quantity >= product.stock) {
-          return prev; // cannot exceed stock
-        }
-        return prev.map((item) =>
-          item.product.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
-        );
+        return prev.map((item) => {
+          if (item.id === cartItemId) {
+            const newQty = item.quantity + 1;
+            return {
+              ...item,
+              quantity: newQty,
+              totalPieces: newQty * (unitType === 'pack' ? ppp : 1),
+            };
+          }
+          return item;
+        });
       }
-      return [...prev, { product, quantity: 1 }];
+      return [
+        ...prev,
+        {
+          id: cartItemId,
+          product,
+          unitType,
+          quantity: 1,
+          unitPrice: price,
+          unitCost: cost,
+          piecesPerPack: ppp,
+          totalPieces: piecesNeeded,
+        },
+      ];
     });
   };
 
-  const updateQuantity = (productId: string, delta: number) => {
+  const updateQuantity = (cartItemId: string, delta: number) => {
     setCart((prev) => {
       return prev
         .map((item) => {
-          if (item.product.id === productId) {
+          if (item.id === cartItemId) {
             const newQty = item.quantity + delta;
             if (newQty <= 0) return null;
-            if (newQty > item.product.stock) return item; // cap at stock
-            return { ...item, quantity: newQty };
+
+            const ppp = item.unitType === 'pack' ? item.piecesPerPack : 1;
+            const newTotalPieces = newQty * ppp;
+            const otherPiecesInCart = getProductPiecesInCart(item.product.id, item.id);
+
+            if (otherPiecesInCart + newTotalPieces > item.product.stock) {
+              const maxExtra = item.product.stock - (otherPiecesInCart + item.totalPieces);
+              alert(
+                `Cannot add more units for "${item.product.name}". Maximum available pieces in stock reached.`
+              );
+              return item;
+            }
+
+            return {
+              ...item,
+              quantity: newQty,
+              totalPieces: newTotalPieces,
+            };
           }
           return item;
         })
@@ -107,8 +166,8 @@ export const POSView: React.FC<POSViewProps> = ({
     });
   };
 
-  const removeFromCart = (productId: string) => {
-    setCart((prev) => prev.filter((item) => item.product.id !== productId));
+  const removeFromCart = (cartItemId: string) => {
+    setCart((prev) => prev.filter((item) => item.id !== cartItemId));
   };
 
   const clearCart = () => {
@@ -119,7 +178,7 @@ export const POSView: React.FC<POSViewProps> = ({
   };
 
   const subtotal = cart.reduce(
-    (acc, item) => acc + item.product.price * item.quantity,
+    (acc, item) => acc + item.unitPrice * item.quantity,
     0
   );
   const numDiscount = typeof discount === 'number' ? Math.max(0, discount) : 0;
@@ -128,11 +187,15 @@ export const POSView: React.FC<POSViewProps> = ({
   const handleCheckout = () => {
     if (cart.length === 0) return;
 
-    // Validate that stock didn't change
-    for (const item of cart) {
-      if (item.quantity > item.product.stock) {
+    // Validate that total pieces deducted across all cart items don't exceed stock
+    for (const p of products) {
+      const piecesForProduct = cart
+        .filter((c) => c.product.id === p.id)
+        .reduce((sum, c) => sum + c.totalPieces, 0);
+
+      if (piecesForProduct > p.stock) {
         alert(
-          `Insufficient stock for "${item.product.name}". Available: ${item.product.stock}, requested: ${item.quantity}.`
+          `Insufficient stock for "${p.name}". Total requested: ${piecesForProduct} pcs, Available: ${p.stock} pcs.`
         );
         return;
       }
@@ -140,12 +203,20 @@ export const POSView: React.FC<POSViewProps> = ({
 
     const saleItems: SaleItem[] = cart.map((item) => ({
       productId: item.product.id,
-      name: item.product.name,
+      name:
+        item.unitType === 'pack'
+          ? `${item.product.name} (Pack)`
+          : item.product.hasPacks
+          ? `${item.product.name} (Piece)`
+          : item.product.name,
       sku: item.product.sku,
       category: item.product.category,
       quantity: item.quantity,
-      price: item.product.price,
-      cost: item.product.cost,
+      unitType: item.unitType,
+      piecesPerPack: item.piecesPerPack,
+      totalPiecesDeducted: item.totalPieces,
+      price: item.unitPrice,
+      cost: item.unitCost,
     }));
 
     try {
@@ -186,7 +257,7 @@ export const POSView: React.FC<POSViewProps> = ({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search Bible, book, stationery, barcode or SKU..."
+                placeholder="Search Bible, book, stationery, or SKU..."
                 className="w-full pl-9 pr-4 py-2 text-xs sm:text-sm bg-neutral-50 border border-neutral-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:bg-white"
                 autoFocus
               />
@@ -214,23 +285,26 @@ export const POSView: React.FC<POSViewProps> = ({
           <div className="flex-1 p-4 overflow-y-auto">
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
               {filteredProducts.map((p) => {
-                const isOut = p.stock <= 0;
-                const isLow = p.stock > 0 && p.stock <= p.minStock;
-                const inCartItem = cart.find((i) => i.product.id === p.id);
-                const inCartQty = inCartItem ? inCartItem.quantity : 0;
-                const remainingToBuy = p.stock - inCartQty;
+                const ppp = p.piecesPerPack || 1;
+                const inCartPieces = getProductPiecesInCart(p.id);
+                const remainingPieces = Math.max(0, p.stock - inCartPieces);
+                const isOut = p.stock <= 0 || remainingPieces <= 0;
+                const isLow = remainingPieces > 0 && remainingPieces <= p.minStock;
+
+                const canBuyPiece = remainingPieces >= 1;
+                const canBuyPack = !!p.hasPacks && remainingPieces >= ppp;
+
+                // Total items of this product in cart (for badge)
+                const itemsOfProdInCart = cart.filter((i) => i.product.id === p.id);
+                const totalUnitsInCart = itemsOfProdInCart.reduce((sum, i) => sum + i.quantity, 0);
 
                 return (
-                  <button
+                  <div
                     key={p.id}
-                    onClick={() => addToCart(p)}
-                    disabled={isOut || remainingToBuy <= 0}
-                    className={`text-left p-3.5 rounded-xl border transition-all flex flex-col justify-between group relative ${
+                    className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between group relative ${
                       isOut
-                        ? 'opacity-60 bg-neutral-50 border-neutral-200 cursor-not-allowed'
-                        : remainingToBuy <= 0
-                        ? 'bg-neutral-50 border-neutral-200 cursor-not-allowed'
-                        : 'bg-white border-neutral-200/90 hover:border-emerald-600 hover:shadow-xs cursor-pointer'
+                        ? 'opacity-60 bg-neutral-50 border-neutral-200'
+                        : 'bg-white border-neutral-200/90 shadow-2xs hover:border-emerald-600'
                     }`}
                   >
                     <div>
@@ -245,32 +319,89 @@ export const POSView: React.FC<POSViewProps> = ({
                       </p>
                     </div>
 
-                    <div className="mt-3 pt-2 border-t border-neutral-100 flex items-baseline justify-between">
-                      <span className="font-bold text-xs sm:text-sm font-mono text-emerald-800">
-                        {formatCurrency(p.price, settings.currencySymbol)}
-                      </span>
+                    <div className="mt-3 pt-2 border-t border-neutral-100 space-y-2">
+                      <div className="flex items-baseline justify-between">
+                        <div className="text-[10px]">
+                          {isOut ? (
+                            <span className="text-red-600 font-bold">Out of stock</span>
+                          ) : (
+                            <span
+                              className={`font-mono font-medium ${
+                                isLow ? 'text-amber-700' : 'text-neutral-600'
+                              }`}
+                            >
+                              Stock:{' '}
+                              {p.hasPacks
+                                ? formatStockUnits(remainingPieces, p.piecesPerPack, {
+                                    showTotalPieces: true,
+                                    short: true,
+                                  })
+                                : `${remainingPieces} pcs`}
+                            </span>
+                          )}
+                        </div>
+                      </div>
 
-                      <div className="text-[10px]">
-                        {isOut ? (
-                          <span className="text-red-600 font-bold">Out of stock</span>
-                        ) : (
-                          <span
-                            className={`font-mono font-medium ${
-                              isLow ? 'text-amber-700' : 'text-neutral-500'
+                      {/* Pricing and Action Buttons */}
+                      {p.hasPacks && p.packPrice ? (
+                        <div className="grid grid-cols-2 gap-1.5 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => addToCart(p, 'piece')}
+                            disabled={!canBuyPiece}
+                            className={`py-1.5 px-2 rounded-lg text-center font-mono text-[11px] font-bold border transition-colors ${
+                              !canBuyPiece
+                                ? 'bg-neutral-100 text-neutral-400 border-neutral-200 cursor-not-allowed'
+                                : 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 cursor-pointer'
                             }`}
                           >
-                            Stock: {p.stock}
+                            <span className="block text-[9px] uppercase tracking-wider text-emerald-700 font-sans font-semibold">
+                              +1 Piece
+                            </span>
+                            {formatCurrency(p.price, settings.currencySymbol)}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => addToCart(p, 'pack')}
+                            disabled={!canBuyPack}
+                            className={`py-1.5 px-2 rounded-lg text-center font-mono text-[11px] font-bold border transition-colors ${
+                              !canBuyPack
+                                ? 'bg-neutral-100 text-neutral-400 border-neutral-200 cursor-not-allowed'
+                                : 'bg-emerald-800 text-white border-emerald-900 hover:bg-emerald-900 shadow-2xs cursor-pointer'
+                            }`}
+                          >
+                            <span className="block text-[9px] uppercase tracking-wider text-emerald-200 font-sans font-semibold">
+                              +1 Pack ({p.piecesPerPack})
+                            </span>
+                            {formatCurrency(p.packPrice, settings.currencySymbol)}
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => addToCart(p, 'piece')}
+                          disabled={!canBuyPiece}
+                          className={`w-full py-1.5 px-3 rounded-lg flex items-center justify-between font-mono font-bold text-xs border transition-colors ${
+                            !canBuyPiece
+                              ? 'bg-neutral-100 text-neutral-400 border-neutral-200 cursor-not-allowed'
+                              : 'bg-emerald-50 text-emerald-900 border-emerald-300 hover:bg-emerald-100 cursor-pointer'
+                          }`}
+                        >
+                          <span className="text-[10px] font-sans font-semibold text-emerald-700">
+                            + Add to Order
                           </span>
-                        )}
-                      </div>
+                          <span>{formatCurrency(p.price, settings.currencySymbol)}</span>
+                        </button>
+                      )}
                     </div>
 
-                    {inCartQty > 0 && (
-                      <span className="absolute top-2 right-2 bg-emerald-700 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-xs">
-                        {inCartQty}
+                    {totalUnitsInCart > 0 && (
+                      <span className="absolute top-2 right-2 bg-emerald-700 text-white text-[10px] font-bold px-1.5 h-5 rounded-full flex items-center justify-center shadow-xs">
+                        {totalUnitsInCart} in cart
                       </span>
                     )}
-                  </button>
+                  </div>
                 );
               })}
 
@@ -305,25 +436,40 @@ export const POSView: React.FC<POSViewProps> = ({
           {/* Cart Items List */}
           <div className="flex-1 p-4 overflow-y-auto space-y-2.5">
             {cart.map((item) => {
-              const lineTotal = item.product.price * item.quantity;
-              const isMaxStock = item.quantity >= item.product.stock;
+              const lineTotal = item.unitPrice * item.quantity;
+              const otherPieces = getProductPiecesInCart(item.product.id, item.id);
+              const ppp = item.unitType === 'pack' ? item.piecesPerPack : 1;
+              const isMaxStock = otherPieces + (item.quantity + 1) * ppp > item.product.stock;
 
               return (
                 <div
-                  key={item.product.id}
+                  key={item.id}
                   className="p-3 bg-neutral-50 rounded-xl border border-neutral-200/80 flex items-center justify-between text-xs gap-2"
                 >
                   <div className="min-w-0 flex-1">
-                    <h5 className="font-semibold text-neutral-900 truncate">
-                      {item.product.name}
-                    </h5>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <h5 className="font-semibold text-neutral-900 truncate">
+                        {item.product.name}
+                      </h5>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                          item.unitType === 'pack'
+                            ? 'bg-emerald-800 text-white'
+                            : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                        }`}
+                      >
+                        {item.unitType === 'pack'
+                          ? `Pack (${item.piecesPerPack} pcs)`
+                          : 'Piece'}
+                      </span>
+                    </div>
                     <div className="text-[11px] text-neutral-500 flex items-center gap-2 mt-0.5">
-                      <span className="font-mono text-emerald-700">
-                        {formatCurrency(item.product.price, settings.currencySymbol)}
+                      <span className="font-mono text-emerald-700 font-semibold">
+                        {formatCurrency(item.unitPrice, settings.currencySymbol)} each
                       </span>
                       <span>·</span>
                       <span className="font-mono text-neutral-400">
-                        avail: {item.product.stock}
+                        deducts: {item.totalPieces} pcs
                       </span>
                     </div>
                   </div>
@@ -331,7 +477,7 @@ export const POSView: React.FC<POSViewProps> = ({
                   <div className="flex items-center gap-2 shrink-0">
                     <div className="flex items-center bg-white border border-neutral-300 rounded-lg p-0.5 shadow-2xs">
                       <button
-                        onClick={() => updateQuantity(item.product.id, -1)}
+                        onClick={() => updateQuantity(item.id, -1)}
                         className="w-6 h-6 flex items-center justify-center text-neutral-600 hover:bg-neutral-100 rounded cursor-pointer"
                       >
                         <Minus className="w-3 h-3" />
@@ -340,7 +486,7 @@ export const POSView: React.FC<POSViewProps> = ({
                         {item.quantity}
                       </span>
                       <button
-                        onClick={() => updateQuantity(item.product.id, 1)}
+                        onClick={() => updateQuantity(item.id, 1)}
                         disabled={isMaxStock}
                         className={`w-6 h-6 flex items-center justify-center rounded cursor-pointer ${
                           isMaxStock
@@ -360,8 +506,8 @@ export const POSView: React.FC<POSViewProps> = ({
                     </div>
 
                     <button
-                      onClick={() => removeFromCart(item.product.id)}
-                      className="text-neutral-400 hover:text-rose-600 p-1"
+                      onClick={() => removeFromCart(item.id)}
+                      className="text-neutral-400 hover:text-rose-600 p-1 cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>

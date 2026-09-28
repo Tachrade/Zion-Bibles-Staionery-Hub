@@ -16,7 +16,12 @@ import {
   FileSpreadsheet
 } from 'lucide-react';
 import { Product, StockMovement, StockMovementType, ShopSettings } from '../../types';
-import { formatCurrency, formatDateTime, getStockStatus } from '../../utils/formatters';
+import {
+  formatCurrency,
+  formatDateTime,
+  getStockStatus,
+  formatStockUnits
+} from '../../utils/formatters';
 
 interface StockManagementViewProps {
   products: Product[];
@@ -322,9 +327,16 @@ export const StockManagementView: React.FC<StockManagementViewProps> = ({
                           <div className="flex items-center gap-2.5">
                             <span className="text-xl shrink-0">{p.icon || '📦'}</span>
                             <div className="min-w-0">
-                              <p className="font-semibold text-neutral-900 leading-tight">
-                                {p.name}
-                              </p>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className="font-semibold text-neutral-900 leading-tight">
+                                  {p.name}
+                                </p>
+                                {p.hasPacks && (
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                    {p.piecesPerPack} pcs/pk
+                                  </span>
+                                )}
+                              </div>
                               <div className="flex items-center gap-1.5 text-[11px] text-neutral-500 mt-0.5">
                                 <span>{p.category}</span>
                                 {p.shelfLocation && (
@@ -346,26 +358,69 @@ export const StockManagementView: React.FC<StockManagementViewProps> = ({
                           {formatCurrency(p.cost, settings.currencySymbol)}
                         </td>
 
-                        <td className="py-3 px-3 text-right font-mono tabular-nums font-semibold text-neutral-900">
-                          {formatCurrency(p.price, settings.currencySymbol)}
+                        <td className="py-3 px-3 text-right font-mono tabular-nums text-neutral-900">
+                          {p.hasPacks && p.packPrice ? (
+                            <div>
+                              <div className="font-bold text-xs text-neutral-900">
+                                {formatCurrency(p.price, settings.currencySymbol)}{' '}
+                                <span className="text-[10px] text-neutral-500 font-normal">/pc</span>
+                              </div>
+                              <div className="text-[10px] font-semibold text-emerald-700">
+                                {formatCurrency(p.packPrice, settings.currencySymbol)}{' '}
+                                <span className="text-[9px] font-normal text-emerald-600">/pk</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="font-semibold text-neutral-900">
+                              {formatCurrency(p.price, settings.currencySymbol)}
+                            </span>
+                          )}
                         </td>
 
                         <td className="py-3 px-4 text-center">
-                          <span
-                            className={`font-mono font-bold text-sm tabular-nums ${
-                              p.stock <= 0
-                                ? 'text-red-600'
-                                : p.stock <= p.minStock
-                                ? 'text-amber-700'
-                                : 'text-neutral-900'
-                            }`}
-                          >
-                            {p.stock}
-                          </span>
+                          {p.hasPacks && p.piecesPerPack ? (
+                            <div>
+                              <span
+                                className={`font-mono font-bold text-sm tabular-nums ${
+                                  p.stock <= 0
+                                    ? 'text-red-600'
+                                    : p.stock <= p.minStock
+                                    ? 'text-amber-700'
+                                    : 'text-neutral-900'
+                                }`}
+                              >
+                                {formatStockUnits(p.stock, p.piecesPerPack, { short: true })}
+                              </span>
+                              <div className="text-[10px] text-neutral-400 font-mono">
+                                ({p.stock} pcs total)
+                              </div>
+                            </div>
+                          ) : (
+                            <span
+                              className={`font-mono font-bold text-sm tabular-nums ${
+                                p.stock <= 0
+                                  ? 'text-red-600'
+                                  : p.stock <= p.minStock
+                                  ? 'text-amber-700'
+                                  : 'text-neutral-900'
+                              }`}
+                            >
+                              {p.stock} pcs
+                            </span>
+                          )}
                         </td>
 
                         <td className="py-3 px-3 text-center font-mono text-neutral-500">
-                          ≤ {p.minStock}
+                          {p.hasPacks && p.piecesPerPack ? (
+                            <div>
+                              <span className="text-xs">≤ {p.minStock} pcs</span>
+                              <div className="text-[10px] text-neutral-400">
+                                ({formatStockUnits(p.minStock, p.piecesPerPack, { short: true })})
+                              </div>
+                            </div>
+                          ) : (
+                            `≤ ${p.minStock}`
+                          )}
                         </td>
 
                         <td className="py-3 px-3">

@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
 import { Product, StockMovement, Sale, ShopSettings } from '../types';
-import { formatCurrency, formatDateTime } from './formatters';
+import { formatCurrency, formatDateTime, formatStockUnits } from './formatters';
 
 export function exportInventoryToExcel(
   products: Product[],
@@ -16,10 +16,15 @@ export function exportInventoryToExcel(
     'Product Name': p.name,
     'Category': p.category,
     'SKU': p.sku,
-    'Barcode': p.barcode || '',
     'Selling Price (₦)': p.price,
     'Cost Price (₦)': p.cost,
-    'Current Stock': p.stock,
+    'Has Packs': p.hasPacks ? 'Yes' : 'No',
+    'Pieces Per Pack': p.piecesPerPack || '—',
+    'Pack Price (₦)': p.packPrice || '—',
+    'Current Stock (Pieces)': p.stock,
+    'Stock Breakdown (Pks & Pcs)': p.hasPacks
+      ? formatStockUnits(p.stock, p.piecesPerPack, { showTotalPieces: true })
+      : `${p.stock} pcs`,
     'Min Reorder Level': p.minStock,
     'Stock Status': p.stock <= 0 ? 'Out of Stock' : p.stock <= p.minStock ? 'Low Stock' : 'Adequate',
     'Total Cost Value (₦)': p.stock * p.cost,
@@ -37,7 +42,7 @@ export function exportInventoryToExcel(
     'Product Name': m.productName,
     'SKU': m.productSku,
     'Movement Type': m.type.toUpperCase(),
-    'Quantity Change': m.quantityChange > 0 ? `+${m.quantityChange}` : m.quantityChange,
+    'Quantity Change (Pieces)': m.quantityChange > 0 ? `+${m.quantityChange}` : m.quantityChange,
     'Stock Before': m.stockBefore,
     'Stock After': m.stockAfter,
     'Reference / Receipt #': m.referenceNo || '—',
@@ -76,6 +81,8 @@ export function exportInventoryToExcel(
         'SKU': i.sku,
         'Category': i.category,
         'Quantity Sold': i.quantity,
+        'Unit Type': i.unitType || 'piece',
+        'Pieces Deducted': i.totalPiecesDeducted || i.quantity,
         'Unit Price (₦)': i.price,
         'Unit Cost (₦)': i.cost,
         'Line Total (₦)': lineTotal,

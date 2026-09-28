@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { Product, Sale, SaleItem, PaymentMethod, ShopSettings, ShopUser } from '../../types';
 import { POSView } from '../POS/POSView';
-import { formatCurrency, formatDateTime } from '../../utils/formatters';
+import { formatCurrency, formatDateTime, formatStockUnits } from '../../utils/formatters';
 
 interface CashierDashboardViewProps {
   products: Product[];
@@ -301,22 +301,56 @@ export const CashierDashboardView: React.FC<CashierDashboardViewProps> = ({
                             {p.shelfLocation || 'Store Shelf'}
                           </td>
 
-                          <td className="py-3 px-3 text-right font-mono font-bold text-emerald-800 text-sm">
-                            {formatCurrency(p.price, settings.currencySymbol)}
+                          <td className="py-3 px-3 text-right font-mono text-emerald-800 text-sm">
+                            {p.hasPacks && p.packPrice ? (
+                              <div>
+                                <div className="font-bold text-xs">
+                                  {formatCurrency(p.price, settings.currencySymbol)}{' '}
+                                  <span className="text-[10px] text-neutral-500 font-normal">/pc</span>
+                                </div>
+                                <div className="text-[10px] font-semibold text-emerald-700">
+                                  {formatCurrency(p.packPrice, settings.currencySymbol)}{' '}
+                                  <span className="text-[9px] font-normal">/pk</span>
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="font-bold">
+                                {formatCurrency(p.price, settings.currencySymbol)}
+                              </span>
+                            )}
                           </td>
 
                           <td className="py-3 px-4 text-center">
-                            <span
-                              className={`font-mono font-bold text-base ${
-                                isOut
-                                  ? 'text-red-600'
-                                  : isLow
-                                  ? 'text-amber-700'
-                                  : 'text-emerald-700'
-                              }`}
-                            >
-                              {p.stock} units
-                            </span>
+                            {p.hasPacks && p.piecesPerPack ? (
+                              <div>
+                                <span
+                                  className={`font-mono font-bold text-sm ${
+                                    isOut
+                                      ? 'text-red-600'
+                                      : isLow
+                                      ? 'text-amber-700'
+                                      : 'text-emerald-700'
+                                  }`}
+                                >
+                                  {formatStockUnits(p.stock, p.piecesPerPack, { short: true })}
+                                </span>
+                                <div className="text-[10px] text-neutral-400 font-mono">
+                                  ({p.stock} pcs total)
+                                </div>
+                              </div>
+                            ) : (
+                              <span
+                                className={`font-mono font-bold text-base ${
+                                  isOut
+                                    ? 'text-red-600'
+                                    : isLow
+                                    ? 'text-amber-700'
+                                    : 'text-emerald-700'
+                                }`}
+                              >
+                                {p.stock} pcs
+                              </span>
+                            )}
                           </td>
 
                           <td className="py-3 px-3">

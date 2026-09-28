@@ -10,7 +10,7 @@ import {
   Plus
 } from 'lucide-react';
 import { Sale, Product, ShopSettings } from '../../types';
-import { formatCurrency, formatDateTime } from '../../utils/formatters';
+import { formatCurrency, formatDateTime, formatStockUnits } from '../../utils/formatters';
 
 interface PostSaleStockCheckModalProps {
   isOpen: boolean;
@@ -36,15 +36,25 @@ export const PostSaleStockCheckModal: React.FC<PostSaleStockCheckModalProps> = (
   if (!isOpen || !sale) return null;
 
   // Compute for each item in the sale:
-  // Previous stock = current stock + quantity sold in this sale
+  // Deducted pieces = item.totalPiecesDeducted (or quantity * piecesPerPack if pack)
+  // Previous stock = current stock + deducted pieces
   // Current stock = current stock now
   const stockCheckItems = sale.items.map((item) => {
     const prod = products.find((p) => p.id === item.productId);
+    const ppp = item.piecesPerPack || prod?.piecesPerPack || 1;
+    const piecesDeducted =
+      typeof item.totalPiecesDeducted === 'number'
+        ? item.totalPiecesDeducted
+        : item.unitType === 'pack'
+        ? item.quantity * ppp
+        : item.quantity;
+
     const currentStock = prod ? prod.stock : 0;
-    const previousStock = currentStock + item.quantity;
+    const previousStock = currentStock + piecesDeducted;
     const minStock = prod ? prod.minStock : settings.defaultMinStock;
     const isOut = currentStock <= 0;
     const isLow = currentStock > 0 && currentStock <= minStock;
+    const hasPacks = !!(prod?.hasPacks || item.unitType === 'pack' || ppp > 1);
 
     return {
       productId: item.productId,
@@ -52,6 +62,10 @@ export const PostSaleStockCheckModal: React.FC<PostSaleStockCheckModalProps> = (
       sku: item.sku,
       category: item.category,
       quantitySold: item.quantity,
+      unitType: item.unitType || 'piece',
+      piecesPerPack: ppp,
+      hasPacks,
+      piecesDeducted,
       price: item.price,
       lineTotal: item.price * item.quantity,
       previousStock,
@@ -147,24 +161,59 @@ export const PostSaleStockCheckModal: React.FC<PostSaleStockCheckModalProps> = (
                           {item.sku}
                         </div>
                       </td>
-                      <td className="py-2.5 px-3 text-center font-mono text-neutral-600">
-                        {item.previousStock}
+                      <td className="py-2.5 px-3 text-center font-mono text-neutral-700">
+                        {item.hasPacks ? (
+                          <div>
+                            <span className="font-bold text-xs">
+                              {formatStockUnits(item.previousStock, item.piecesPerPack, { short: true })}
+                            </span>
+                            <div className="text-[10px] text-neutral-400">
+                              ({item.previousStock} pcs)
+                            </div>
+                          </div>
+                        ) : (
+                          `${item.previousStock} pcs`
+                        )}
                       </td>
                       <td className="py-2.5 px-3 text-center font-mono font-bold text-rose-600">
-                        -{item.quantitySold}
+                        -{item.quantitySold}{' '}
+                        <span className="text-[11px]">
+                          {item.unitType === 'pack'
+                            ? `pk (${item.piecesDeducted} pcs)`
+                            : 'pcs'}
+                        </span>
                       </td>
                       <td className="py-2.5 px-3 text-center">
-                        <span
-                          className={`font-mono font-bold text-sm ${
-                            item.isOut
-                              ? 'text-red-600'
-                              : item.isLow
-                              ? 'text-amber-700'
-                              : 'text-emerald-700'
-                          }`}
-                        >
-                          {item.currentStock}
-                        </span>
+                        {item.hasPacks ? (
+                          <div>
+                            <span
+                              className={`font-mono font-bold text-sm ${
+                                item.isOut
+                                  ? 'text-red-600'
+                                  : item.isLow
+                                  ? 'text-amber-700'
+                                  : 'text-emerald-700'
+                              }`}
+                            >
+                              {formatStockUnits(item.currentStock, item.piecesPerPack, { short: true })}
+                            </span>
+                            <div className="text-[10px] text-neutral-400 font-mono">
+                              ({item.currentStock} pcs)
+                            </div>
+                          </div>
+                        ) : (
+                          <span
+                            className={`font-mono font-bold text-sm ${
+                              item.isOut
+                                ? 'text-red-600'
+                                : item.isLow
+                                ? 'text-amber-700'
+                                : 'text-emerald-700'
+                            }`}
+                          >
+                            {item.currentStock} pcs
+                          </span>
+                        )}
                       </td>
                       <td className="py-2.5 px-3">
                         {item.isOut ? (
