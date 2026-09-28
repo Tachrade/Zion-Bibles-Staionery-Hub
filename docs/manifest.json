@@ -1,0 +1,18 @@
+{
+  "name": "Zion Bible & Stationery Hub",
+  "short_name": "Zion Hub POS",
+  "description": "POS & Cloud Inventory Management for Zion Bible & Stationery Hub",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#064e3b",
+  "theme_color": "#064e3b",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
