@@ -11,6 +11,7 @@ export interface Product {
   name: string;
   category: ProductCategory;
   sku: string;
+  barcode?: string;
   price: number; // Selling price in NGN (individual piece price)
   cost: number;  // Cost price in NGN (individual piece cost)
   stock: number; // Current on-hand quantity in BASE PIECES

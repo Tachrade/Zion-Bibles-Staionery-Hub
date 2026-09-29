@@ -192,7 +192,14 @@ export function subscribeToCloudSettings(
 export async function saveProductToCloud(product: Product) {
   try {
     const docRef = doc(db, 'products', product.id);
-    await setDoc(docRef, sanitizeForFirestore(product), { merge: true });
+    // Explicitly normalize product fields to guarantee no undefined values reach Firestore
+    const normalizedProduct: Record<string, any> = {
+      ...product,
+      barcode: product.barcode?.trim() || null,
+      description: product.description?.trim() || null,
+      shelfLocation: product.shelfLocation?.trim() || null,
+    };
+    await setDoc(docRef, sanitizeForFirestore(normalizedProduct), { merge: true });
   } catch (e) {
     console.warn('Failed to save product to cloud:', e);
   }

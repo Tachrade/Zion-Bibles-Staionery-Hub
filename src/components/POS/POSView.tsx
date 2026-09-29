@@ -70,9 +70,12 @@ export const POSView: React.FC<POSViewProps> = ({
   const categories = ['All', 'Bibles', 'Books & Literature', 'Stationery', 'Church Supplies', 'Gift Items'];
 
   const filteredProducts = products.filter((p) => {
+    const q = searchQuery.toLowerCase().trim();
     const matchesSearch =
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.sku.toLowerCase().includes(searchQuery.toLowerCase());
+      !q ||
+      p.name.toLowerCase().includes(q) ||
+      p.sku.toLowerCase().includes(q) ||
+      (p.barcode && p.barcode.toLowerCase().includes(q));
     const matchesCat = selectedCategory === 'All' || p.category === selectedCategory;
     return matchesSearch && matchesCat;
   });
@@ -257,7 +260,7 @@ export const POSView: React.FC<POSViewProps> = ({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search Bible, book, stationery, or SKU..."
+                placeholder="Search Bible, book, stationery, SKU, or barcode..."
                 className="w-full pl-9 pr-4 py-2 text-xs sm:text-sm bg-neutral-50 border border-neutral-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:bg-white"
                 autoFocus
               />

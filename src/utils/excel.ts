@@ -16,6 +16,7 @@ export function exportInventoryToExcel(
     'Product Name': p.name,
     'Category': p.category,
     'SKU': p.sku,
+    'Barcode': p.barcode || '',
     'Selling Price (₦)': p.price,
     'Cost Price (₦)': p.cost,
     'Has Packs': p.hasPacks ? 'Yes' : 'No',
