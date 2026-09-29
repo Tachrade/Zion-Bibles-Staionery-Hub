@@ -21,28 +21,56 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <script>
-      // Defensive guard against browser extensions (e.g., MetaMask, Rabby, Coinbase Wallet)
-      // throwing "Cannot redefine property: ethereum" when multiple web3 extensions collide in iframes
-      try {
-        if (!('ethereum' in window)) {
-          let _eth = undefined;
-          Object.defineProperty(window, 'ethereum', {
-            get() { return _eth; },
-            set(v) { _eth = v; },
-            configurable: true,
-            enumerable: true
-          });
+      // Defensive guard against browser extensions (MetaMask, Coinbase Wallet, Phantom, Rabby, Trust, Brave)
+      // that inject into iframes and try to re-define `window.ethereum` with non-configurable property descriptors.
+      (function() {
+        try {
+          var originalDefineProperty = Object.defineProperty;
+          Object.defineProperty = function(obj, prop, descriptor) {
+            if (obj === window && (prop === 'ethereum' || prop === 'web3')) {
+              try {
+                // Ensure the descriptor is always configurable so other extensions don't crash
+                descriptor.configurable = true;
+                return originalDefineProperty.call(Object, obj, prop, descriptor);
+              } catch (err) {
+                // Return gracefully without throwing "Cannot redefine property: ethereum"
+                return obj;
+              }
+            }
+            try {
+              return originalDefineProperty.call(Object, obj, prop, descriptor);
+            } catch (err) {
+              if (String(prop).toLowerCase().indexOf('ethereum') !== -1 || (err && err.message && err.message.toLowerCase().indexOf('ethereum') !== -1)) {
+                return obj;
+              }
+              throw err;
+            }
+          };
+        } catch (e) {
+          // ignore
         }
-      } catch (e) {
-        console.warn('Ethereum shim warning ignored:', e);
-      }
-      // Suppress benign third-party wallet extension collision errors from halting the app
-      window.addEventListener('error', function(event) {
-        if (event && event.message && event.message.includes('ethereum')) {
-          event.stopImmediatePropagation();
-          event.preventDefault();
-        }
-      }, true);
+
+        // Catch synchronous unhandled errors from injected scripts
+        window.addEventListener('error', function(event) {
+          var msg = (event && event.message) ? String(event.message).toLowerCase() : '';
+          if (msg.indexOf('ethereum') !== -1 || msg.indexOf('redefine property') !== -1) {
+            event.stopImmediatePropagation();
+            event.preventDefault();
+            return true;
+          }
+        }, true);
+
+        // Catch async unhandled promise rejections ("Unhandled Rejection: Cannot redefine property: ethereum")
+        window.addEventListener('unhandledrejection', function(event) {
+          var reason = event && event.reason;
+          var msg = reason ? (reason.message || String(reason)).toLowerCase() : '';
+          if (msg.indexOf('ethereum') !== -1 || msg.indexOf('redefine property') !== -1) {
+            event.stopImmediatePropagation();
+            event.preventDefault();
+            return true;
+          }
+        }, true);
+      })();
     </script>
   </head>
   <body class="bg-neutral-50 text-neutral-900 font-sans antialiased selection:bg-emerald-100 selection:text-emerald-900">

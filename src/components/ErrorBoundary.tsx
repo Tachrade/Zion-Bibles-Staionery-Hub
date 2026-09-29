@@ -16,10 +16,19 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   public static getDerivedStateFromError(error: Error): State {
+    const msg = error?.message?.toLowerCase() || '';
+    if (msg.includes('ethereum') || msg.includes('redefine property')) {
+      // Do not crash application state for external browser extension collisions
+      return { hasError: false };
+    }
     return { hasError: true, error };
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    const msg = error?.message?.toLowerCase() || '';
+    if (msg.includes('ethereum') || msg.includes('redefine property')) {
+      return;
+    }
     console.error('Uncaught error caught by ErrorBoundary:', error, errorInfo);
   }
 
